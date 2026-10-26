@@ -1,0 +1,63 @@
+name: Publish verified Windows installer
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version tag, e.g. v0.2.0'
+        required: true
+      installer_url:
+        description: 'Temporary GitHub asset download URL (customer installer only)'
+        required: true
+      sha256:
+        description: 'Expected installer SHA-256 from the private release'
+        required: true
+permissions:
+  contents: write
+concurrency:
+  group: publish-${{ inputs.tag }}
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download and verify customer installer
+        env:
+          INSTALLER_URL: ${{ inputs.installer_url }}
+          EXPECTED_SHA256: ${{ inputs.sha256 }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        shell: python
+        run: |
+          import os, re, hashlib, urllib.request, urllib.parse
+          from pathlib import Path
+          url = os.environ['INSTALLER_URL']
+          print('::add-mask::' + url, flush=True)
+          parsed = urllib.parse.urlsplit(url)
+          if parsed.scheme != 'https' or parsed.hostname not in {'release-assets.githubusercontent.com', 'objects.githubusercontent.com'} or parsed.username or parsed.password:
+              raise ValueError('Expected a GitHub customer-asset download URL')
+          if not re.fullmatch(r'v\d+\.\d+\.\d+', os.environ['RELEASE_TAG']):
+              raise ValueError('Invalid version tag')
+          expected = os.environ['EXPECTED_SHA256'].lower()
+          if not re.fullmatch(r'[a-f0-9]{64}', expected):
+              raise ValueError('Invalid expected checksum')
+          digest = hashlib.sha256()
+          with urllib.request.urlopen(url, timeout=120) as source, open('InterviewHelper-Setup.exe', 'wb') as target:
+              while chunk := source.read(1024 * 1024):
+                  digest.update(chunk)
+                  target.write(chunk)
+          if digest.hexdigest() != expected:
+              raise ValueError('Installer checksum mismatch; refusing publication')
+          Path('SHA256SUMS.txt').write_text(expected + '  InterviewHelper-Setup.exe\n', encoding='ascii')
+      - name: Publish installer and checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo 'This release already exists; refusing to overwrite it.'
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" InterviewHelper-Setup.exe SHA256SUMS.txt --title "Interview Helper $RELEASE_TAG" --notes 'Download InterviewHelper-Setup.exe below under Assets. Windows 10/11 x64. Current builds are unsigned and may show Unknown Publisher. SHA256SUMS.txt verifies installer integrity. AI access is separate from the app license. This repository contains customer installers only.' --latest
