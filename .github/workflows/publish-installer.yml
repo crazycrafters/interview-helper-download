@@ -26,14 +26,14 @@ jobs:
           python-version: '3.12'
       - name: Download and verify customer installer
         env:
-          INSTALLER_URL: ${{ inputs.installer_url }}
           EXPECTED_SHA256: ${{ inputs.sha256 }}
           RELEASE_TAG: ${{ inputs.tag }}
         shell: python
         run: |
-          import os, re, hashlib, urllib.request, urllib.parse
+          import os, re, json, hashlib, urllib.request, urllib.parse
           from pathlib import Path
-          url = os.environ['INSTALLER_URL']
+          with open(os.environ['GITHUB_EVENT_PATH']) as event_file:
+              url = json.load(event_file)['inputs']['installer_url']
           print('::add-mask::' + url, flush=True)
           parsed = urllib.parse.urlsplit(url)
           if parsed.scheme != 'https' or parsed.hostname not in {'release-assets.githubusercontent.com', 'objects.githubusercontent.com'} or parsed.username or parsed.password:
