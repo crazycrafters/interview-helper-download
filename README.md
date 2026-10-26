@@ -6,7 +6,7 @@ Official customer downloads for **Interview Helper by Watto**. The app's source 
 
 **[Browse Windows releases](https://github.com/crazycrafters/interview-helper-download/releases)**
 
-The first installer upload is being prepared. Once published, use:
+Download the tested Windows installer from the latest published release:
 
 **[Download the latest Windows installer](https://github.com/crazycrafters/interview-helper-download/releases/latest/download/InterviewHelper-Setup.exe)**
 
